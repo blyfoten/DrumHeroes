@@ -2,7 +2,7 @@
 // With drumSound = 'samples' every mapped hit plays a built-in drum sound immediately;
 // with a line-in (or monitoring on the module) the kit makes its own sound and MIDI is used only for scoring.
 
-import { kitProfile, KEYBOARD_MAP } from './drumMap.js';
+import { laneForInputNote, KEYBOARD_MAP } from './drumMap.js';
 import { audio } from './audioEngine.js';
 import { onNoteOn } from './midiInput.js';
 import { loadSettings } from './storage.js';
@@ -26,7 +26,7 @@ export const hitBus = {
 export function initInput() {
   onNoteOn(({ note, velocity, timeStamp }) => {
     const settings = loadSettings();
-    const lane = kitProfile(settings.kitProfile).notes.get(note) ?? null;
+    const lane = laneForInputNote(note, settings);
     emit({ source: 'midi', note, lane, velocity, timeStamp }, settings);
   });
 

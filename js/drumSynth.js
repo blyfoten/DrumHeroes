@@ -127,6 +127,20 @@ export function generateDrumBuffers(ctx) {
   };
 }
 
+/**
+ * A woodblock-style click: two inharmonic partials up where drums are thin, plus a short noise
+ * transient, so it stays audible on top of a loud kit (e.g. a drum module on the line-in).
+ */
 export function generateClick(ctx, frequency, duration, amplitude) {
-  return render(ctx, duration, 1, (t) => Math.sin(TAU * frequency * t) * Math.exp(-t * 40) * amplitude);
+  const buffer = render(ctx, duration, 1, (t, noise) => {
+    const body = Math.sin(TAU * frequency * t) + 0.6 * Math.sin(TAU * frequency * 1.48 * t);
+    const tick = t < 0.002 ? noise() * 0.5 : 0;
+    return body * Math.exp(-t * 55) + tick;
+  });
+  // Normalize so `amplitude` is the true peak.
+  const data = buffer.getChannelData(0);
+  let peak = 0;
+  for (const v of data) peak = Math.max(peak, Math.abs(v));
+  for (let i = 0; i < data.length; i++) data[i] *= amplitude / peak;
+  return buffer;
 }

@@ -16,7 +16,7 @@ python3 server.py            # opens http://localhost:8765
 
 The server only needs the Python standard library. Use **Chrome/Chromium** (or Edge) for the best Web MIDI support; Firefox works but asks for MIDI permission through an add-on prompt.
 
-Try it out: **+ Add Song** → drop `demo/basic-rock-beat.mid` into the MIDI step → **Practice** → **Space** to play.
+Try it out: pick one of the built-in **Demo songs** in the library (*Simple Kick & Snare* is the easiest) → **Space** to play.
 
 ### Optional: remove drums from the song audio
 
@@ -49,14 +49,16 @@ Pick one under **Settings → Quick setup**:
 
 **Computer keyboard:** `A` HH-C · `S` HH-O · `D` CR1 · `F` snare · `G` kick · `H` tom 1 · `J` tom 2 · `K` floor · `L` CR2 · `;` ride · `'` CR3. On the practice screen, **Space** plays and pauses, and **R** restarts.
 
-Use **Settings → Pad test** to see which MIDI note each pad sends and which lane it maps to.
+Use **Settings → Pad test** to see which MIDI note each pad sends and which lane it maps to. **Settings → Note remapping** sends any note to a different lane (or ignores it), on top of the kit profile. For example, with a broken hi-hat pedal, map open hi-hat (46) to Closed Hi-Hat.
 
 ---
 
 ## Features
 
 - **Highway with only the lanes the song uses**, in kit order: HH-C, HH-O, CR1, snare, kick, tom 1, tom 2, floor, CR2, ride, CR3.
-- **Hit detection**: Easy ±95 ms, Normal ±65 ms, Hard ±40 ms. Hits are judged against the MIDI event's own timestamp, with an adjustable **hit timing offset** to compensate for audio latency.
+- **3D highway**: the track recedes toward a horizon and notes come at you, Guitar Hero style. Perfect hits explode into sparks.
+- **Hit detection**: Easy ±95 ms, Normal ±65 ms, Hard ±40 ms, or any custom window from ±20 to ±200 ms. Hits are judged against the MIDI event's own timestamp, with an adjustable **hit timing offset** to compensate for audio latency.
+- **Built-in demo songs**: play them from the library without importing anything.
 - **Tempo control**: 25–125% presets plus ±5 BPM steps. Pitch is preserved, and the timing window stays the same in real time at any speed.
 - **Metronome and count-in** (none, 1 or 2 bars), and a "drums start in N s" hint for songs with long intros.
 - **Feedback while playing**: green or red lane flashes, early/late timing readout, and accuracy, hits and misses live.
@@ -72,7 +74,7 @@ Use **Settings → Pad test** to see which MIDI note each pad sends and which la
 server.py            static server + local Demucs/HPSS separation API (stdlib only)
 index.html
 css/style.css
-demo/                demo drum loop
+demo/                built-in demo drum MIDI files
 js/
   main.js            router, audio unlock, input setup
   midiFile.js        Standard MIDI File parser → highway transcription
@@ -86,6 +88,7 @@ js/
   input.js           MIDI and keyboard → hits; drum sound routing
   separation.js      client for the separation API
   storage.js         IndexedDB library and settings
+  demos.js           built-in demo songs
   views/             library, import dialog, practice, settings
 ```
 

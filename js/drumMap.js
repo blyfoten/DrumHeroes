@@ -114,6 +114,23 @@ export function kitProfile(id) {
   return KIT_PROFILES[id] ?? KIT_PROFILES['alesis-nitro-max'];
 }
 
+/**
+ * Lane for a note from your instrument: a custom override (settings.noteOverrides, note → lane,
+ * '' = ignore the note) wins over the kit profile. Handy for e.g. a broken hi-hat pedal.
+ */
+export function laneForInputNote(note, settings) {
+  const override = settings.noteOverrides?.[note];
+  if (override !== undefined) return override || null;
+  return kitProfile(settings.kitProfile).notes.get(note) ?? null;
+}
+
+const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+
+/** MIDI note number → name using the C2 = 36 convention (matches the GM drum chart). */
+export function noteName(note) {
+  return `${NOTE_NAMES[note % 12]}${Math.floor(note / 12) - 1}`;
+}
+
 // Computer-keyboard fallback so the app can be tried without a kit (home row, left to right like the highway).
 export const KEYBOARD_MAP = {
   a: Lane.ClosedHiHat,
@@ -134,5 +151,22 @@ export const DIFFICULTY = {
   normal: { label: 'Normal (±65ms)', windowMs: 65 },
   hard: { label: 'Hard (±40ms)', windowMs: 40 },
 };
+
+export const CUSTOM_WINDOW_RANGE = { min: 20, max: 200 };
+
+/** Hit window (± ms) for a difficulty; 'custom' uses settings.customWindowMs. */
+export function hitWindowMs(difficulty, settings) {
+  if (difficulty === 'custom') return settings.customWindowMs;
+  return (DIFFICULTY[difficulty] ?? DIFFICULTY.normal).windowMs;
+}
+
+export function difficultyLabel(difficulty, windowMs) {
+  return difficulty === 'custom' ? `Custom (±${windowMs}ms)` : DIFFICULTY[difficulty]?.label ?? difficulty;
+}
+
+/** Hits this close to the note count as perfect: a fifth of the window, but at least 10 ms. */
+export function perfectMs(windowMs) {
+  return Math.max(10, windowMs * 0.2);
+}
 
 export const SPEED_PRESETS = [25, 50, 75, 100, 125];

@@ -3,6 +3,7 @@
 import { generateDrumBuffers, generateClick } from './drumSynth.js';
 
 const MAX_VOICES = 16;
+const METRONOME_BOOST = 2; // the metronome slider's full scale, so the click can sit on top of a loud line-in
 
 class AudioEngine {
   constructor() {
@@ -18,7 +19,14 @@ class AudioEngine {
     const ctx = new AudioContext({ latencyHint: 'interactive' });
     this.ctx = ctx;
     this.master = ctx.createGain();
-    this.master.connect(ctx.destination);
+    // Song + line-in drums + click can sum past full scale; a fast limiter keeps that from clipping.
+    this.limiter = ctx.createDynamicsCompressor();
+    this.limiter.threshold.value = -3;
+    this.limiter.knee.value = 0;
+    this.limiter.ratio.value = 20;
+    this.limiter.attack.value = 0.001;
+    this.limiter.release.value = 0.1;
+    this.master.connect(this.limiter).connect(ctx.destination);
 
     this.feedbackGain = ctx.createGain();
     this.metronomeGain = ctx.createGain();
@@ -27,8 +35,8 @@ class AudioEngine {
     for (const g of [this.feedbackGain, this.metronomeGain, this.backingGain, this.stemGain]) g.connect(this.master);
 
     this.drumBuffers = generateDrumBuffers(ctx);
-    this.accentClick = generateClick(ctx, 1000, 0.015, 0.8);
-    this.normalClick = generateClick(ctx, 800, 0.012, 0.5);
+    this.accentClick = generateClick(ctx, 2200, 0.06, 0.9);
+    this.normalClick = generateClick(ctx, 1650, 0.05, 0.65);
     this.voices = [];
     return ctx;
   }
@@ -82,7 +90,7 @@ class AudioEngine {
       backing: this.backingGain,
       stem: this.stemGain,
     }[which];
-    if (node) node.gain.value = value;
+    if (node) node.gain.value = which === 'metronome' ? value * METRONOME_BOOST : value;
   }
 
   /** Routes an <audio> element through the given gain bus. */

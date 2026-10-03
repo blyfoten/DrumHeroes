@@ -105,7 +105,8 @@ const SETTINGS_KEY = 'drumhero.settings';
 export const DEFAULT_SETTINGS = {
   midiInput: '',
   audioOutput: '',
-  difficulty: 'normal',
+  difficulty: 'normal', // a DIFFICULTY key, or 'custom'
+  customWindowMs: 80, // hit window for the 'custom' difficulty
   inputOffsetMs: 45,
   countInBars: 1,
   metronomeEnabled: false,
@@ -116,6 +117,7 @@ export const DEFAULT_SETTINGS = {
   feedbackVolume: 1,
   keyboardInput: true,
   kitProfile: 'alesis-nitro-max',
+  noteOverrides: {}, // MIDI note → lane ('' = ignore), applied on top of the kit profile
   drumSound: 'samples', // 'samples' | 'linein' | 'off'
   lineInDevice: '',
 };

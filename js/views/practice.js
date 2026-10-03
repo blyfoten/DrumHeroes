@@ -2,7 +2,8 @@
 
 import { h, formatTime, formatDate, toast } from '../dom.js';
 import { getSong, getFile, putSong, addRun, listRuns, loadSettings, saveSettings } from '../storage.js';
-import { DIFFICULTY, SPEED_PRESETS, LANE_INFO, kitProfile } from '../drumMap.js';
+import { SPEED_PRESETS, LANE_INFO, kitProfile, hitWindowMs, difficultyLabel, perfectMs } from '../drumMap.js';
+import { toleranceControl } from './tolerance.js';
 import { audio } from '../audioEngine.js';
 import { SongPlayer } from '../songPlayer.js';
 import { HitDetection } from '../hitDetection.js';
@@ -39,9 +40,9 @@ export async function renderPractice(root, { navigate, songId }) {
   await player.ready;
 
   let speed = 100;
-  let difficulty = settings.difficulty;
+  const windowMs = () => hitWindowMs(settings.difficulty, settings);
   const detection = new HitDetection();
-  detection.init(notes, DIFFICULTY[difficulty].windowMs, 1);
+  detection.init(notes, windowMs(), 1);
 
   for (const [bus, key] of [['backing', 'backingVolume'], ['stem', 'stemVolume'], ['feedback', 'feedbackVolume'],
     ['metronome', 'metronomeVolume'], ['master', 'masterVolume']]) {
@@ -66,9 +67,10 @@ export async function renderPractice(root, { navigate, songId }) {
   const speedButtons = SPEED_PRESETS.map((p) => h('button.btn.small', { on: { click: () => setSpeed(p) } }, `${p}%`));
   const metroBtn = h('button.btn.toggle', { title: 'Metronome', on: { click: toggleMetronome } }, '🕒 Click');
   const midiBtn = h('button.btn.toggle', { title: 'Show incoming MIDI notes', on: { click: toggleMidiDebug } }, '🔌 MIDI');
-  const diffSelect = h('select', { title: 'Difficulty', on: { change: (e) => setDifficulty(e.target.value) } },
-    Object.entries(DIFFICULTY).map(([k, d]) => h('option', { value: k }, d.label)));
-  diffSelect.value = difficulty;
+  const tolerance = toleranceControl(settings, () => {
+    saveSettings(settings);
+    detection.setWindow(windowMs(), rate());
+  });
 
   const slider = (label, key, bus, title) => {
     const input = h('input', { type: 'range', min: 0, max: 1, step: 0.01, title });
@@ -114,7 +116,7 @@ export async function renderPractice(root, { navigate, songId }) {
             settings.drumSound === 'linein' ? 'Drum module line-in volume' : 'Your drum sounds volume'),
           slider('🕒', 'metronomeVolume', 'metronome', 'Metronome volume')),
         h('div.group',
-          diffSelect,
+          tolerance,
           metroBtn,
           midiBtn,
           h('button.btn', { on: { click: showHistory } }, '📊 History')))),
@@ -182,7 +184,7 @@ export async function renderPractice(root, { navigate, songId }) {
   function setSpeed(pct) {
     speed = Math.min(300, Math.max(10, pct));
     player.setRate(rate());
-    detection.setWindow(DIFFICULTY[difficulty].windowMs, rate());
+    detection.setWindow(windowMs(), rate());
     updateSpeedUi();
   }
 
@@ -190,13 +192,6 @@ export async function renderPractice(root, { navigate, songId }) {
     const bpm = song.bpm * rate() + delta;
     if (bpm < 20 || bpm > 300) return;
     setSpeed((bpm / song.bpm) * 100);
-  }
-
-  function setDifficulty(value) {
-    difficulty = value;
-    settings.difficulty = value;
-    saveSettings(settings);
-    detection.setWindow(DIFFICULTY[difficulty].windowMs, rate());
   }
 
   function toggleMetronome() {
@@ -233,12 +228,17 @@ export async function renderPractice(root, { navigate, songId }) {
     const t = Math.max(0, player.timeAt(timeStamp) - offset);
     const result = detection.processHit(lane, t);
     for (const n of result.missed) highway.flash(n.lane, false);
-    highway.flash(lane, true);
     if (result.type === 'hit') {
       const early = result.note.time > t;
       const ms = Math.round(result.diffMs / rate());
-      timingEl.textContent = ms <= 10 ? 'Perfect!' : `${ms} ms ${early ? 'early' : 'late'}`;
-      timingEl.className = `timing-feedback show ${ms <= 10 ? 'perfect' : early ? 'early' : 'late'}`;
+      const perfect = ms <= perfectMs(windowMs());
+      highway.flash(lane, true, perfect);
+      timingEl.textContent = perfect ? 'PERFECT!' : `${ms} ms ${early ? 'early' : 'late'}`;
+      timingEl.className = 'timing-feedback';
+      void timingEl.offsetWidth; // restart the animation on back-to-back hits
+      timingEl.className = `timing-feedback show ${perfect ? 'perfect' : early ? 'early' : 'late'}`;
+    } else {
+      highway.flash(lane, true);
     }
     updateStats();
   });
@@ -267,7 +267,8 @@ export async function renderPractice(root, { navigate, songId }) {
       total: detection.total,
       hits: detection.hitCount,
       misses: detection.missCount,
-      difficulty,
+      difficulty: settings.difficulty,
+      windowMs: windowMs(),
       tempoPercent: speed,
       bpm: song.bpm * rate(),
       completed,
@@ -292,7 +293,7 @@ export async function renderPractice(root, { navigate, songId }) {
         h('div', h('div.n', run.total), h('div.muted', 'Total'))),
       h('div.summary-details',
         h('div', 'Song: ', h('b', song.title)),
-        h('div', 'Difficulty: ', h('b', DIFFICULTY[run.difficulty].label)),
+        h('div', 'Difficulty: ', h('b', difficultyLabel(run.difficulty, run.windowMs))),
         h('div', 'Tempo: ', h('b', `${Math.round(run.tempoPercent)}% (${Math.round(run.bpm)} BPM)`))),
       h('div.dialog-actions',
         h('button.btn', { on: { click: () => navigate('#/library') } }, 'Back to Library'),
@@ -309,7 +310,7 @@ export async function renderPractice(root, { navigate, songId }) {
         ? h('div.history-list', runs.map((r) => h('div.history-row',
           h('span.muted', formatDate(r.timestamp)),
           h('b.good', `${r.accuracy.toFixed(1)}%`),
-          h('span.muted', DIFFICULTY[r.difficulty]?.label.split(' ')[0] ?? r.difficulty),
+          h('span.muted', r.difficulty === 'custom' ? `±${r.windowMs}ms` : difficultyLabel(r.difficulty).split(' ')[0]),
           h('span.muted', `${Math.round(r.tempoPercent)}%`),
           h('span.muted', `${r.hits}/${r.total}`),
           h('span', r.completed ? '✓' : '⏹'))))

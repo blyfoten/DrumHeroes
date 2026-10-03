@@ -2,7 +2,8 @@
 
 import { h, toast } from '../dom.js';
 import { loadSettings, saveSettings, DEFAULT_SETTINGS } from '../storage.js';
-import { DIFFICULTY, LANE_INFO, KEYBOARD_MAP, KIT_PROFILES } from '../drumMap.js';
+import { LANES, LANE_INFO, KEYBOARD_MAP, KIT_PROFILES, kitProfile, noteName } from '../drumMap.js';
+import { toleranceControl } from './tolerance.js';
 import { initMidi, listInputs, selectInput, midiError, onDevicesChanged } from '../midiInput.js';
 import { audio, AudioEngine } from '../audioEngine.js';
 import { hitBus, applyDrumSound } from '../input.js';
@@ -39,6 +40,51 @@ export async function renderSettings(root, { navigate }) {
   fillMidi();
   const offDevices = onDevicesChanged(fillMidi);
 
+  // Note remapping: per-note overrides on top of the kit profile.
+  const laneOptions = () => [
+    LANES.map((l) => h('option', { value: l.lane }, l.name)),
+    h('option', { value: '' }, 'Ignore'),
+  ];
+  const setOverrides = (overrides) => {
+    settings.noteOverrides = overrides; // always replace: the default object is shared
+    save();
+    fillOverrides();
+  };
+  const overrideList = h('div.choice-list');
+  const fillOverrides = () => {
+    const profileNotes = kitProfile(settings.kitProfile).notes;
+    const entries = Object.entries(settings.noteOverrides).sort(([a], [b]) => a - b);
+    overrideList.replaceChildren(...entries.map(([note, lane]) => {
+      const select = h('select', laneOptions());
+      select.value = lane;
+      select.addEventListener('change', () => setOverrides({ ...settings.noteOverrides, [note]: select.value }));
+      const remove = () => {
+        const { [note]: _, ...rest } = settings.noteOverrides;
+        setOverrides(rest);
+      };
+      const kitLane = profileNotes.get(Number(note));
+      return h('div.row',
+        h('span', `Note ${note} (${noteName(Number(note))})`),
+        h('span.muted', `kit: ${kitLane ? LANE_INFO[kitLane].name : 'unmapped'} →`),
+        select,
+        h('button.btn.small', { title: 'Remove', on: { click: remove } }, '✕'));
+    }));
+    if (!entries.length) overrideList.append(h('div.muted.hint', 'No overrides. Your kit profile is used as-is.'));
+  };
+  const addNote = h('input', { type: 'number', min: 0, max: 127, placeholder: 'Note', style: { width: '90px' } });
+  const addLane = h('select', laneOptions());
+  addLane.value = LANES[0].lane;
+  const addOverride = () => {
+    const note = Number(addNote.value);
+    if (addNote.value === '' || !Number.isInteger(note) || note < 0 || note > 127) {
+      toast('Enter a MIDI note number 0–127, or hit the pad to fill it in.', 'error');
+      return;
+    }
+    setOverrides({ ...settings.noteOverrides, [note]: addLane.value });
+    toast(`Note ${note} now plays ${addLane.value ? LANE_INFO[addLane.value].name : 'nothing (ignored)'}.`);
+  };
+  fillOverrides();
+
   // Live monitor
   const monitor = h('div.monitor', 'Hit a pad to test…');
   const offHit = hitBus.on(({ source, note, lane, velocity }) => {
@@ -48,10 +94,11 @@ export async function renderSettings(root, { navigate }) {
     monitor.classList.remove('pulse');
     void monitor.offsetWidth;
     monitor.classList.add('pulse');
+    if (source === 'midi') addNote.value = note;
   });
 
   // Kit profile
-  const kitSelect = h('select', { on: { change: () => { settings.kitProfile = kitSelect.value; save(); } } },
+  const kitSelect = h('select', { on: { change: () => { settings.kitProfile = kitSelect.value; save(); fillOverrides(); } } },
     Object.entries(KIT_PROFILES).map(([id, p]) => h('option', { value: id }, p.name)));
   kitSelect.value = settings.kitProfile;
 
@@ -159,10 +206,8 @@ export async function renderSettings(root, { navigate }) {
     'Device names appear after the browser has been granted media permission; otherwise they are numbered.');
   }
 
-  // Difficulty
-  const diffSelect = h('select', { on: { change: () => { settings.difficulty = diffSelect.value; save(); } } },
-    Object.entries(DIFFICULTY).map(([k, d]) => h('option', { value: k }, d.label)));
-  diffSelect.value = settings.difficulty;
+  // Difficulty / hit tolerance
+  const tolerance = toleranceControl(settings, save);
 
   // Offset
   const offsetValue = h('span.value');
@@ -214,8 +259,13 @@ export async function renderSettings(root, { navigate }) {
         'How notes from your instrument map to lanes. A MIDI keyboard uses General MIDI drum notes (C2 kick, D2 snare, F#2 hi-hat, C#3 crash, D#3 ride…).'),
       section('DRUM SOUND', soundRadios, lineInRow),
       section('PAD TEST', monitor, 'Shows which MIDI note each pad sends and which lane it maps to.'),
+      section('NOTE REMAPPING', overrideList,
+        h('div.row', addNote, h('span', '→'), addLane,
+          h('button.btn', { on: { click: addOverride } }, '+ Add override')),
+        'Send a note to a different lane, e.g. open hi-hat (46) → Closed Hi-Hat if your pedal is broken. Hit a pad to fill in its note number.'),
       outputSection,
-      section('DIFFICULTY', diffSelect),
+      section('DIFFICULTY / HIT TOLERANCE', tolerance,
+        'How far from the note a hit still counts. Pick a preset or drag the slider for a custom window.'),
       section('HIT TIMING OFFSET', h('div.row', offsetInput, offsetValue),
         'Increase if your hits register late. Start around 45 ms; Bluetooth headphones need much more.'),
       section('COUNT-IN BARS', countIn),
