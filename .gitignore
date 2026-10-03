@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+
+# Editors / OS
+.vscode/
+.idea/
+*.swp
+*~
+.DS_Store
+Thumbs.db
+
+# Local media and logs (keep songs out of the repo)
+*.log
+*.mp3
+*.flac
+*.wav
+*.ogg
+*.m4a
+!demo/**
