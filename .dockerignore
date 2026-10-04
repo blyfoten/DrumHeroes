@@ -1,0 +1,4 @@
+.git
+server.py
+__pycache__
+*.log

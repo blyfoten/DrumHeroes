@@ -1,0 +1,7 @@
+services:
+  drumheroes:
+    build: .
+    container_name: drumheroes
+    restart: unless-stopped
+    ports:
+      - "172.17.0.1:3020:80"

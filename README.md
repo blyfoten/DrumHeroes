@@ -1,16 +1,16 @@
-# 🥁 DrumHeros
+# 🥁 DrumHeroes
 
 A **Guitar Hero-style drum trainer that runs in the browser** on Linux, macOS, and Windows. Import a drum MIDI file (for example from Songsterr), optionally with the song's audio. Notes scroll down a highway and you play along on an electronic drum kit, a MIDI keyboard, or the computer keyboard, and get scored as you go.
 
-DrumHeros is a web port of [**DrumHero** by Lucas Frazão](https://github.com/Lucas-Frazao/DrumHero), a Windows/WPF app. See [Credits](#credits).
+DrumHeroes is a web port of [**DrumHero** by Lucas Frazão](https://github.com/Lucas-Frazao/DrumHero), a Windows/WPF app. See [Credits](#credits).
 
 ---
 
 ## Quick start
 
 ```bash
-git clone git@github.com:blyfoten/DrumHeros.git
-cd DrumHeros
+git clone git@github.com:blyfoten/DrumHeroes.git
+cd DrumHeroes
 python3 server.py            # opens http://localhost:8765
 ```
 
@@ -98,7 +98,7 @@ No build step and no dependencies: plain ES modules served as-is.
 
 ## Credits
 
-DrumHeros is based on **[DrumHero](https://github.com/Lucas-Frazao/DrumHero) by [Lucas Frazão](https://github.com/Lucas-Frazao)**. These parts of this project are ported from that codebase:
+DrumHeroes is based on **[DrumHero](https://github.com/Lucas-Frazao/DrumHero) by [Lucas Frazão](https://github.com/Lucas-Frazao)**. These parts of this project are ported from that codebase:
 
 - the Alesis Nitro Max MIDI mapping and the General MIDI fallback table
 - the MIDI-to-highway transcription (tempo map, channel-10 extraction, the three-simultaneous-notes priority rule)
