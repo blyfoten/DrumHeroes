@@ -17,6 +17,12 @@ export const DEMOS = [
     description: 'Eighth-note hi-hat with kick and snare: the classic rock groove.',
     file: 'demo/basic-rock-beat.mid',
   },
+  {
+    id: 'groove-and-fills',
+    title: 'Groove & Fills',
+    description: 'Syncopated kick, a ride section and a short tom fill every four bars.',
+    file: 'demo/groove-and-fills.mid',
+  },
 ];
 
 /** Returns the library song id for a demo, importing it on first use. */

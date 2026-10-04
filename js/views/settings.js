@@ -270,7 +270,7 @@ export async function renderSettings(root, { navigate }) {
         'Increase if your hits register late. Start around 45 ms; Bluetooth headphones need much more.'),
       section('COUNT-IN BARS', countIn),
       section('COMPUTER KEYBOARD', h('label.check', kbBox, h('span', 'Use the keyboard as a drum kit')), keyList,
-        'Space plays/pauses and R restarts on the practice screen.'),
+        'On the practice screen, Space starts the song over from the top (with count-in) and R rewinds without playing.'),
       section('STEM SEPARATION', serverInfo),
       section('STORAGE', storageInfo),
       h('div.row',

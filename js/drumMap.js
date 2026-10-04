@@ -29,7 +29,22 @@ export const LANES = [
   { lane: Lane.Crash3, label: 'CR3', color: '#BA55D3', name: 'Crash 3' },
 ];
 
-export const LANE_INDEX = Object.fromEntries(LANES.map((l, i) => [l.lane, i]));
+/** A representative General MIDI drum note per lane (used when exporting hits as MIDI). */
+export const LANE_GM_NOTE = {
+  [Lane.Kick]: 36,
+  [Lane.Snare]: 38,
+  [Lane.RackTom1]: 48,
+  [Lane.RackTom2]: 45,
+  [Lane.FloorTom]: 43,
+  [Lane.ClosedHiHat]: 42,
+  [Lane.OpenHiHat]: 46,
+  [Lane.Crash1]: 49,
+  [Lane.Crash2]: 57,
+  [Lane.Crash3]: 55,
+  [Lane.Ride]: 51,
+};
+
+export const LANE_INDEX =Object.fromEntries(LANES.map((l, i) => [l.lane, i]));
 export const LANE_INFO = Object.fromEntries(LANES.map((l) => [l.lane, l]));
 
 const NOTE_TO_LANE = new Map([

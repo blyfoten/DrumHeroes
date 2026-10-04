@@ -2,8 +2,10 @@
 
 import { h, formatTime, formatDate, toast } from '../dom.js';
 import { getSong, getFile, putSong, addRun, listRuns, loadSettings, saveSettings } from '../storage.js';
-import { SPEED_PRESETS, LANE_INFO, kitProfile, hitWindowMs, difficultyLabel, perfectMs } from '../drumMap.js';
+import { SPEED_PRESETS, LANE_INFO, kitProfile, hitWindowMs, difficultyLabel } from '../drumMap.js';
+import { makeRecording, analyzeRecording, signedMs } from '../analysis.js';
 import { toleranceControl } from './tolerance.js';
+import { openRunReview } from './review.js';
 import { audio } from '../audioEngine.js';
 import { SongPlayer } from '../songPlayer.js';
 import { HitDetection } from '../hitDetection.js';
@@ -52,6 +54,9 @@ export async function renderPractice(root, { navigate, songId }) {
 
   // ---------- DOM ----------
   const accuracyEl = h('span.stat-value.good', '0.0%');
+  const perfectEl = h('span.stat-value', '0.0%');
+  const missPctEl = h('span.stat-value', '0.0%');
+  const wrongEl = h('span.stat-value', '0.0%');
   const hitsEl = h('span.good', '✓ 0');
   const missEl = h('span.bad', '✗ 0');
   const bpmEl = h('span');
@@ -59,7 +64,7 @@ export async function renderPractice(root, { navigate, songId }) {
   const timeEl = h('span.time', '0:00 / 0:00');
   const progressFill = h('div.progress-fill');
   const progressBar = h('div.progress-track.seek', { title: 'Click to seek' }, progressFill);
-  const playBtn = h('button.btn.primary.transport', { title: 'Play / Pause (Space)', on: { click: togglePlay } }, '▶');
+  const playBtn = h('button.btn.primary.transport', { title: 'Play / Pause (Space starts over from the top)', on: { click: togglePlay } }, '▶');
   const canvas = h('canvas.highway');
   const countInEl = h('div.count-in.hidden');
   const timingEl = h('div.timing-feedback');
@@ -92,7 +97,10 @@ export async function renderPractice(root, { navigate, songId }) {
         h('button.btn', { on: { click: () => navigate('#/library') } }, '← Back'),
         h('div.song-heading', h('div.song-title', song.title), h('div.muted', song.artist)),
         h('div.stats',
-          h('div.pill', h('span.muted', 'Accuracy '), accuracyEl),
+          h('div.pill', { title: 'Notes hit, out of the notes that have passed so far' }, h('span.muted', 'Hit '), accuracyEl),
+          h('div.pill', { title: 'Perfect hits, out of the notes that have passed so far' }, h('span.muted', 'Perfect '), perfectEl),
+          h('div.pill', { title: 'Notes missed, out of the notes that have passed so far' }, h('span.muted', 'Missed '), missPctEl),
+          h('div.pill', { title: 'Your hits that matched no note: goes up if you just hammer every drum' }, h('span.muted', 'Wrong hits '), wrongEl),
           h('div.pill', hitsEl, ' ', missEl),
           midiDebugEl,
           h('div.pill', bpmEl))),
@@ -136,7 +144,10 @@ export async function renderPractice(root, { navigate, songId }) {
   function rate() { return speed / 100; }
 
   function updateStats() {
-    accuracyEl.textContent = `${detection.accuracy.toFixed(1)}%`;
+    accuracyEl.textContent = `${detection.liveAccuracy.toFixed(1)}%`;
+    perfectEl.textContent = `${detection.livePerfectRate.toFixed(1)}%`;
+    missPctEl.textContent = `${detection.liveMissRate.toFixed(1)}%`;
+    wrongEl.textContent = `${detection.wrongRate.toFixed(1)}%`;
     hitsEl.textContent = `✓ ${detection.hitCount}`;
     missEl.textContent = `✗ ${detection.missCount}`;
   }
@@ -226,12 +237,12 @@ export async function renderPractice(root, { navigate, songId }) {
     if (!lane || !player.playing || !active) return;
     const offset = (settings.inputOffsetMs / 1000) * rate();
     const t = Math.max(0, player.timeAt(timeStamp) - offset);
-    const result = detection.processHit(lane, t);
+    const result = detection.processHit(lane, t, { note, velocity });
     for (const n of result.missed) highway.flash(n.lane, false);
     if (result.type === 'hit') {
       const early = result.note.time > t;
       const ms = Math.round(result.diffMs / rate());
-      const perfect = ms <= perfectMs(windowMs());
+      const { perfect } = result;
       highway.flash(lane, true, perfect);
       timingEl.textContent = perfect ? 'PERFECT!' : `${ms} ms ${early ? 'early' : 'late'}`;
       timingEl.className = 'timing-feedback';
@@ -243,10 +254,25 @@ export async function renderPractice(root, { navigate, songId }) {
     updateStats();
   });
 
+  /** Space: start the song over from the top right away, whatever state the screen is in. */
+  function startOver() {
+    restart();
+    history.classList.add('hidden');
+    togglePlay();
+  }
+
   function onKey(e) {
-    if (e.target.closest('input, select, textarea')) return;
-    if (e.code === 'Space') { e.preventDefault(); togglePlay(); }
-    else if (e.key === 'r' && !e.repeat && !e.ctrlKey && !e.metaKey) restart();
+    // Only text fields keep Space; sliders, dropdowns and buttons shouldn't swallow it.
+    if (e.target.closest('input[type=text], input[type=number], textarea')) return;
+    if (e.code === 'Space') {
+      e.preventDefault(); // don't also "click" a focused button or open a focused dropdown
+      if (!e.repeat) {
+        document.activeElement?.blur?.();
+        startOver();
+      }
+    } else if (e.target.closest('input, select')) {
+      // leave R / Escape to the focused control
+    } else if (e.key === 'r' && !e.repeat && !e.ctrlKey && !e.metaKey) restart();
     else if (e.key === 'Escape') { summary.classList.add('hidden'); history.classList.add('hidden'); }
   }
   window.addEventListener('keydown', onKey);
@@ -258,20 +284,29 @@ export async function renderPractice(root, { navigate, songId }) {
   };
 
   async function finish(completed) {
+    const endTime = Math.max(0, player.currentTime);
     detection.finalize();
     updateStats();
+    // Final percentages are relative to every note in the song, not just the ones that passed.
     const run = {
       songId: song.id,
       timestamp: new Date().toISOString(),
       accuracy: detection.accuracy,
+      perfectRate: detection.perfectRate,
+      wrongRate: detection.wrongRate,
       total: detection.total,
       hits: detection.hitCount,
+      perfect: detection.perfectCount,
       misses: detection.missCount,
+      extra: detection.extraCount,
       difficulty: settings.difficulty,
       windowMs: windowMs(),
       tempoPercent: speed,
       bpm: song.bpm * rate(),
       completed,
+      recording: makeRecording(notes, detection.hits, {
+        rate: rate(), offsetMs: settings.inputOffsetMs, windowMs: windowMs(), endTime,
+      }),
     };
     try {
       await addRun(run);
@@ -284,21 +319,41 @@ export async function renderPractice(root, { navigate, songId }) {
   }
 
   function showSummary(run) {
+    const analysis = analyzeRecording(run.recording);
+    const timing = analysis.count
+      ? `${signedMs(analysis.median)} median (${analysis.early} early, ${analysis.late} late)`
+      : '–';
     summary.replaceChildren(h('div.modal-card.summary',
       h('h2', run.completed ? 'Performance Summary' : 'Run Stopped'),
       h('div.big-accuracy', run.accuracy.toFixed(1), h('small', '%')),
+      h('div.muted', 'of all notes in the song hit'),
       h('div.summary-stats',
         h('div', h('div.good.n', run.hits), h('div.muted', 'Hits')),
-        h('div', h('div.bad.n', run.misses), h('div.muted', 'Missed')),
+        h('div', h('div.n.perfect', run.perfect), h('div.muted', `Perfect (${run.perfectRate.toFixed(1)}%)`)),
+        h('div', h('div.bad.n', run.misses), h('div.muted', `Missed (${pctOf(run.misses, run.total)}%)`)),
+        h('div', h('div.n', run.extra), h('div.muted', `Wrong hits (${run.wrongRate.toFixed(1)}%)`)),
         h('div', h('div.n', run.total), h('div.muted', 'Total'))),
       h('div.summary-details',
         h('div', 'Song: ', h('b', song.title)),
         h('div', 'Difficulty: ', h('b', difficultyLabel(run.difficulty, run.windowMs))),
-        h('div', 'Tempo: ', h('b', `${Math.round(run.tempoPercent)}% (${Math.round(run.bpm)} BPM)`))),
+        h('div', 'Tempo: ', h('b', `${Math.round(run.tempoPercent)}% (${Math.round(run.bpm)} BPM)`)),
+        h('div', 'Timing: ', h('b', timing))),
       h('div.dialog-actions',
         h('button.btn', { on: { click: () => navigate('#/library') } }, 'Back to Library'),
+        h('button.btn', { on: { click: () => review(run) } }, '🔍 Review run'),
         h('button.btn.primary', { on: { click: restart } }, 'Try Again'))));
     summary.classList.remove('hidden');
+  }
+
+  function review(run) {
+    openRunReview({
+      song,
+      run,
+      onApplyOffset: (ms) => {
+        settings.inputOffsetMs = ms;
+        saveSettings(settings);
+      },
+    });
   }
 
   async function showHistory() {
@@ -307,13 +362,21 @@ export async function renderPractice(root, { navigate, songId }) {
       h('div.history-head', h('h2', 'Practice History'),
         h('button.btn.icon', { on: { click: () => history.classList.add('hidden') } }, '✕')),
       runs.length
-        ? h('div.history-list', runs.map((r) => h('div.history-row',
-          h('span.muted', formatDate(r.timestamp)),
-          h('b.good', `${r.accuracy.toFixed(1)}%`),
-          h('span.muted', r.difficulty === 'custom' ? `±${r.windowMs}ms` : difficultyLabel(r.difficulty).split(' ')[0]),
-          h('span.muted', `${Math.round(r.tempoPercent)}%`),
-          h('span.muted', `${r.hits}/${r.total}`),
-          h('span', r.completed ? '✓' : '⏹'))))
+        ? h('div.history-list',
+          h('div.history-row.history-cols',
+            ['Date', 'Hit', 'Perfect', 'Wrong', 'Level', 'Tempo', 'Notes', '', ''].map((t) => h('span.muted', t))),
+          runs.map((r) => h('div.history-row',
+            h('span.muted', formatDate(r.timestamp)),
+            h('b.good', `${r.accuracy.toFixed(1)}%`),
+            h('span', r.perfectRate === undefined ? '–' : `${r.perfectRate.toFixed(1)}%`),
+            h('span', r.wrongRate === undefined ? '–' : `${r.wrongRate.toFixed(1)}%`),
+            h('span.muted', r.difficulty === 'custom' ? `±${r.windowMs}ms` : difficultyLabel(r.difficulty).split(' ')[0]),
+            h('span.muted', `${Math.round(r.tempoPercent)}%`),
+            h('span.muted', `${r.hits}/${r.total}`),
+            h('span', { title: r.completed ? 'Completed' : 'Stopped early' }, r.completed ? '✓' : '⏹'),
+            r.recording
+              ? h('button.btn.small', { title: 'Review this run', on: { click: () => review(r) } }, '🔍')
+              : h('span'))))
         : h('p.muted', 'No runs yet — play the song to record one.')));
     history.classList.remove('hidden');
   }
@@ -362,4 +425,8 @@ export async function renderPractice(root, { navigate, songId }) {
     highway.dispose();
     for (const url of urls) URL.revokeObjectURL(url);
   };
+}
+
+function pctOf(part, whole) {
+  return (whole ? (part / whole) * 100 : 0).toFixed(1);
 }

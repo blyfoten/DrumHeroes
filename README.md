@@ -47,7 +47,7 @@ Pick one under **Settings → Quick setup**:
 - **Alesis Nitro Max**: the kit the original app was built for.
 - **General MIDI / MIDI keyboard**: C2 kick, D2 snare, F#2 closed hi-hat, A#2 open hi-hat, C#3 crash, D#3 ride, and the toms in between.
 
-**Computer keyboard:** `A` HH-C · `S` HH-O · `D` CR1 · `F` snare · `G` kick · `H` tom 1 · `J` tom 2 · `K` floor · `L` CR2 · `;` ride · `'` CR3. On the practice screen, **Space** plays and pauses, and **R** restarts.
+**Computer keyboard:** `A` HH-C · `S` HH-O · `D` CR1 · `F` snare · `G` kick · `H` tom 1 · `J` tom 2 · `K` floor · `L` CR2 · `;` ride · `'` CR3. On the practice screen, **Space** starts the song over from the top right away (with the count-in), and **R** rewinds without playing. The ▶/⏸ button plays and pauses.
 
 Use **Settings → Pad test** to see which MIDI note each pad sends and which lane it maps to. **Settings → Note remapping** sends any note to a different lane (or ignores it), on top of the kit profile. For example, with a broken hi-hat pedal, map open hi-hat (46) to Closed Hi-Hat.
 
